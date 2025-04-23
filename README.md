@@ -44,11 +44,11 @@ Shows the range of potential revenue outcomes per team across simulated seasons.
 
 ### Revenue Before and After Lucky Win
 Highlights the change in projected revenue from a single unexpected win.  
-![Revenue Before and After Lucky Win](Graphs/revenue_before_and_after_lucky_win.png)
+![Revenue Before and After Lucky Win](Graphs/revenue_before_after_lucky_win.png)
 
 ### Offense vs Defense Investment
 Compares the monetary gain (in GBP millions) from improving offense vs defense for each team. 
-![Offense vs Defense Investment](Graphs/offense_vs_defense_investment.png)
+![Offense vs Defense Investment](Graphs/offense_defense_investment.png)
 
 ## Key Takeaways
 
