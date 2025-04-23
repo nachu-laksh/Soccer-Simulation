@@ -1,0 +1,415 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+team_params <- read.csv("C:\\Users\\Nachu\\OneDrive - University of Pittsburgh\\Alistair's class\\Assignments\\TeamEstim.csv")
+```
+
+
+```{r}
+head(team_params)
+#get lists of alpha, deltas and team names
+alphaList<-team_params$alpha
+deltaList<-team_params$delta
+names(alphaList)<-team_params$team
+names(deltaList)<-team_params$team
+
+head(alphaList)
+head(deltaList)
+
+#function to simulate results of a match
+draw.score<-function(team1,team2){
+    c(
+        rpois(1,exp(alphaList[team1]-deltaList[team2])),
+  rpois(1,exp(alphaList[team2]-deltaList[team1]))
+    )
+}
+
+#Test
+draw.score("Man United", "Liverpool")
+```
+```{r}
+#install.packages("gtools")
+library('gtools')
+# All possible matches in a season
+allMatches<-combinations(20, 2, v=team_params$team,repeats.allowed=FALSE)
+colnames(allMatches)<-c("home","away")
+head(allMatches,9)
+length(allMatches)
+```
+```{r}
+ScoresMatrix <- matrix(nrow=nrow(allMatches),  ncol=4)
+for (ii in 1:nrow(allMatches)  ) {
+     ScoresMatrix[ii,1:2]=allMatches[ii,]
+     ScoresMatrix[ii,3:4]= draw.score(allMatches[ii,"home"],allMatches[ii,"away"] )  
+}
+colnames(ScoresMatrix)<-c("home.team","away.team","home.score","away.score")
+head(ScoresMatrix)
+
+
+
+
+
+
+```
+```{r}
+ScoresMatrix <- as.data.frame(ScoresMatrix)
+ScoresMatrix$home.score <- as.numeric(ScoresMatrix$home.score)
+ScoresMatrix$away.score <- as.numeric(ScoresMatrix$away.score)
+
+home_results <- data.frame(
+    team = ScoresMatrix$home.team,
+    goals_scored = ScoresMatrix$home.score,
+    goals_conceded = ScoresMatrix$away.score,
+    points = ifelse(ScoresMatrix$home.score > ScoresMatrix$away.score, 3,
+            ifelse(ScoresMatrix$home.score == ScoresMatrix$away.score, 1,0))
+)                 
+away_results <- data.frame(
+  team = ScoresMatrix$away.team,
+  goals_scored = ScoresMatrix$away.score,
+  goals_conceded = ScoresMatrix$home.score,
+  points = ifelse(ScoresMatrix$away.score > ScoresMatrix$home.score, 3,
+                ifelse(ScoresMatrix$away.score == ScoresMatrix$home.score, 1, 0))
+)
+
+# Combine both into one big results table
+combined_table <- rbind(home_results, away_results)
+
+
+library(dplyr)
+points_table <- combined_table %>%
+  group_by(team) %>%
+  summarise(
+    total_points = sum(points),
+    goals_scored = sum(goals_scored),
+    goals_conceded = sum(goals_conceded)
+  ) %>%
+  mutate(
+    goal_diff = goals_scored - goals_conceded
+  ) %>%
+  arrange(desc(total_points), desc(goal_diff), desc(goals_scored)) %>%
+  mutate(
+    position = row_number(),
+    revenue = c(
+      149.6, 145.9, 142.1, 138.4, 73.7, 70.0, 55.2, 33.5, 29.8, 26.0,
+      22.3, 18.6, 14.9, 11.2, 7.5, 3.7, 0, -88.7, -92.5, -96.2
+    )[position]
+  )
+
+head(points_table)
+
+#Visualisations from 1 round of simulation
+library(ggplot2)
+
+#order by points and tie break with goal diff
+ggplot(points_table,aes(x=reorder(team,total_points+0.00001*goal_diff),y=total_points))+
+geom_col(fill = "blue")+
+geom_text(aes(label = total_points), hjust = -0.1, size = 3.5) +
+coord_flip()+
+labs(
+    title = "Premier League Team Rankings by Simulated Points",
+    x = "Team",
+    y = "Total Points"
+)
+
+```
+```{r}
+#Put all of the above in a single function that can be repeated multiple times, perhaps 1000 to figure which teams have more variability in earnings
+
+sim_season <- function(alphaList, deltaList, allMatches){
+    allMatches<-as.data.frame(permutations(20, 2, v=team_params$team,repeats.allowed=FALSE))
+    colnames(allMatches) <- c("home", "away")
+        for (ii in 1:nrow(allMatches)) {
+        ScoresMatrix[ii, 1:2] <- allMatches[ii, ]
+        ScoresMatrix[ii, 3:4] <- draw.score(allMatches[ii, "home"], allMatches[ii, "away"])
+        }
+    colnames(allMatches)<-c("home","away")
+    ScoresMatrix <- as.data.frame(ScoresMatrix)
+    ScoresMatrix$home.score <- as.numeric(ScoresMatrix$home.score)
+    ScoresMatrix$away.score <- as.numeric(ScoresMatrix$away.score)
+    
+    home_results <- data.frame(
+        team = ScoresMatrix$home.team,
+        goals_scored = ScoresMatrix$home.score,
+        goals_conceded = ScoresMatrix$away.score,
+        points = ifelse(ScoresMatrix$home.score > ScoresMatrix$away.score, 3,
+            ifelse(ScoresMatrix$home.score == ScoresMatrix$away.score, 1,0))
+        )                 
+        away_results <- data.frame(
+          team = ScoresMatrix$away.team,
+          goals_scored = ScoresMatrix$away.score,
+          goals_conceded = ScoresMatrix$home.score,
+          points = ifelse(ScoresMatrix$away.score > ScoresMatrix$home.score, 3,
+                ifelse(ScoresMatrix$away.score == ScoresMatrix$home.score, 1, 0))
+        )
+
+        # Combine both into one big results table
+        combined_table <- rbind(home_results, away_results)
+
+    points_table <- combined_table %>%
+  group_by(team) %>%
+  summarise(
+    total_points = sum(points),
+    goals_scored = sum(goals_scored),
+    goals_conceded = sum(goals_conceded)
+  ) %>%
+  mutate(
+    goal_diff = goals_scored - goals_conceded
+  ) %>%
+  arrange(desc(total_points), desc(goal_diff), desc(goals_scored)) %>%
+  mutate(
+    position = row_number(),
+    revenue = c(
+      149.6, 145.9, 142.1, 138.4, 73.7, 70.0, 55.2, 33.5, 29.8, 26.0,
+      22.3, 18.6, 14.9, 11.2, 7.5, 3.7, 0, -88.7, -92.5, -96.2
+    )[position]
+  )
+  return(points_table)
+}
+
+num_sims <-1000
+rev_matrix <- matrix(0,nrow=length(points_table$team),ncol=num_sims)
+rownames(rev_matrix) = points_table$team
+
+sim_results <- vector("list", length = num_sims)
+
+for (i in 1:num_sims) {
+  sim_table <- sim_season(alphaList, deltaList, allMatches)
+  rev_matrix[sim_table$team, i] <- sim_table$revenue
+  sim_results[[i]] <- sim_table
+}
+
+sim_results[[20]]
+```
+
+
+```{r}
+rev_df <- as.data.frame(rev_matrix)
+
+revenue_stats <- data.frame(
+  team = rownames(rev_matrix),
+  mean_revenue = apply(rev_matrix, 1, mean),   
+  sd_revenue = apply(rev_matrix, 1, sd)
+)
+
+print(revenue_stats)
+revenue_stats[ , -1] <- round(revenue_stats[ , -1], 2)
+
+ggplot(revenue_stats,aes(x=reorder(team,mean_revenue),y=mean_revenue))+
+geom_col(fill = "blue")+
+geom_text(aes(label = mean_revenue), hjust = -0.5, size = 3.8) +
+scale_y_continuous(expand = expansion(mult = c(0.2, 0.2))) +   
+coord_flip()+               
+labs(
+    title = "Premier League Team Expected Position",
+    x = "Team",
+    y = "Expected Revenue"
+)
+
+
+                  
+ggplot(revenue_stats,aes(x=reorder(team,sd_revenue),y=sd_revenue))+
+geom_col(fill = "red")+
+geom_text(aes(label = sd_revenue), hjust = -0.5, size = 3.8) +
+scale_y_continuous(expand = expansion(mult = c(0, 0.2))) +                  
+coord_flip()+               
+labs(
+    title = "Premier League Team Revenue Standard Deviations",
+    x = "Team",
+    y = "Standard Deviations"
+)
+
+
+library(reshape2)
+
+rev_long <- melt(rev_matrix)
+colnames(rev_long) <- c("team", "simulation", "revenue")
+
+head(rev_long)
+tail(rev_long)
+
+ggplot(rev_long, aes(x = reorder(team, revenue), y = revenue)) +
+  geom_boxplot(fill = "lightblue") +
+    scale_y_continuous(expand = expansion(mult = c(0.2, 0.3))) + 
+  coord_flip() +
+  labs(
+    title = "Distribution of Simulated Revenues per Team",
+    x = "Team",
+    y = "Revenue (GBP millions)"
+  ) +
+  theme_minimal()
+```
+
+
+```{r}
+
+library(dplyr)
+
+# Create a list to store each modified league table
+lucky_win_tables <- list()
+
+# Loop over each team
+for (i in 1:nrow(points_table)) {
+  team <- points_table$team[i]
+  
+  # Create a fresh copy of the points table
+  modified_table <- points_table
+  
+  # Add 3 points ONLY to the current team
+  modified_table$total_points[modified_table$team == team] <-
+    modified_table$total_points[modified_table$team == team] + 3
+  
+  # Recalculate league table rankings and revenue
+  modified_table <- modified_table %>%
+  arrange(desc(total_points), desc(goal_diff), desc(goals_scored), team) %>%
+  mutate(
+    position = row_number(),
+    revenue = c(
+      149.6, 145.9, 142.1, 138.4, 73.7, 70.0, 55.2, 33.5, 29.8, 26.0,
+      22.3, 18.6, 14.9, 11.2, 7.5, 3.7, 0, -88.7, -92.5, -96.2
+    )[position]
+  )
+  
+  # Store in the list with team name as key
+  lucky_win_tables[[team]] <- modified_table
+}
+
+modified_table
+```
+
+```{r}
+library(dplyr)
+
+#  empty results data frame
+lucky_win_revenue_diff <- data.frame(
+  team = character(),
+  revenue_before = numeric(),
+  revenue_after = numeric(),
+  delta_revenue = numeric(),
+  position_before = numeric(),
+  position_after = numeric(),
+  stringsAsFactors = FALSE
+)
+
+# Loop through each team and compute revenue impact of lucky win
+for (i in 1:length(lucky_win_tables)) {
+  team <- names(lucky_win_tables)[i]
+  
+  rev_before <- points_table$revenue[points_table$team == team]
+  rev_after <- lucky_win_tables[[team]]$revenue[lucky_win_tables[[team]]$team == team]
+  
+  pos_before <- points_table$position[points_table$team == team]
+  pos_after <- lucky_win_tables[[team]]$position[lucky_win_tables[[team]]$team == team]
+  
+  lucky_win_revenue_diff[i, ] <- data.frame(
+    team = team,
+    revenue_before = as.numeric(rev_before),
+    revenue_after = as.numeric(rev_after),
+    delta_revenue = round(as.numeric(rev_after) - as.numeric(rev_before), 2),
+    position_before = as.numeric(pos_before),
+    position_after = as.numeric(pos_after),
+    stringsAsFactors = FALSE
+  )
+}
+
+# Sorting by delta_revenue descending
+lucky_win_revenue_diff <- lucky_win_revenue_diff %>%
+  arrange(desc(delta_revenue))
+
+print(lucky_win_revenue_diff)
+```
+```{r}
+library(ggplot2)
+max_val <- max(lucky_win_revenue_diff$revenue_after) + 2
+ggplot(lucky_win_revenue_diff, aes(x = reorder(team, revenue_before))) +
+  geom_point(aes(y = revenue_before), color = "red", size = 3) +
+  geom_point(aes(y = revenue_after), color = "green", size = 3) +
+  geom_segment(aes(y = revenue_before, yend = revenue_after, xend = team), color = "gray") +
+   geom_text(aes(y = max_val, label = paste0("+", round(delta_revenue, 1))),
+            size = 2.3, hjust = 0, color = "black") +
+  coord_flip() +
+  labs(
+    title = "Revenue Before vs After Lucky Win",
+    x = "Team",
+    y = "Revenue (GBP millions)"
+  )
+```
+```{r}
+library(dplyr)
+
+# Initialize results storage
+sensitivity_results <- data.frame(
+  team = team_params$team,
+  base_revenue = NA,
+  offense_revenue = NA,
+  defense_revenue = NA,
+  offense_gain = NA,
+  defense_gain = NA
+)
+
+# Step 1: Get baseline revenue
+base_table <- sim_season(alphaList, deltaList, allMatches)
+baseline_revenue <- setNames(base_table$revenue, base_table$team)
+sensitivity_results$base_revenue <- baseline_revenue[sensitivity_results$team]
+
+# Step 2: Loop with 10-rep simulations
+for (team in team_params$team) {
+  
+  # ---- Offense Boost ----
+  alpha_boosted <- alphaList
+  alpha_boosted[team] <- alpha_boosted[team] + log(1.1)
+  
+  offense_revenue <- mean(replicate(10, {
+    table <- sim_season(alpha_boosted, deltaList, allMatches)
+    table$revenue[table$team == team]
+  }))
+  
+  # ---- Defense Boost ----
+  delta_boosted <- deltaList
+  delta_boosted[team] <- delta_boosted[team] + log(0.9)
+  
+  defense_revenue <- mean(replicate(100, {
+    table <- sim_season(alphaList, delta_boosted, allMatches)
+    table$revenue[table$team == team]
+  }))
+  
+  # Store results
+  sensitivity_results[sensitivity_results$team == team, "offense_revenue"] <- offense_revenue
+  sensitivity_results[sensitivity_results$team == team, "defense_revenue"] <- defense_revenue
+}
+
+# Step 3: Calculate gains
+sensitivity_results <- sensitivity_results %>%
+  mutate(
+    offense_gain = round(offense_revenue - base_revenue, 2),
+    defense_gain = round(defense_revenue - base_revenue, 2)
+  )
+
+sensitivity_results
+
+
+library(ggplot2)
+
+library(ggrepel)
+
+ggplot(sensitivity_results, aes(x = offense_gain, y = defense_gain, label = team)) +
+  geom_point(color = "dodgerblue", size = 3) +
+  geom_text_repel(size = 2, max.overlaps = 20) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray") +
+  labs(
+    title = "Monetary Benefit of Investing in Offense vs Defense",
+    x = "Offense Gain (GBP millions)",
+    y = "Defense Gain (GBP millions)"
+  ) +
+  theme_minimal()
+
+replicate(10, sim_season(alphaList, deltaList, allMatches) %>% filter(team == "Chelsea"))
+
+
+
+```
+
+
+
